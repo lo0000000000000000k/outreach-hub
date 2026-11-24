@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Outreach Hub</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <header><img src="icon128.png" alt="" width="20" height="20"><b>Outreach Hub</b><button id="gear" class="link" aria-label="Settings">Settings</button></header>
+
+  <section id="settings" hidden>
+    <p class="muted">Connect once. Get both from your Outreach Hub admin.</p>
+    <label for="appUrl">App address</label><input id="appUrl" placeholder="https://your-outreach-hub.vercel.app">
+    <label for="key">Capture key</label><input id="key" type="password" placeholder="CAPTURE_KEY">
+    <button id="saveSettings" class="btn primary">Save</button>
+    <p id="settingsMsg" class="muted" role="status"></p>
+  </section>
+
+  <section id="loading"><p class="muted">Reading this page…</p></section>
+
+  <form id="form" hidden>
+    <div id="dup" class="note warn" hidden></div>
+    <div class="grid">
+      <div class="full"><label for="business">Business</label><input id="business"></div>
+      <div><label for="founder">Person name</label><input id="founder"></div>
+      <div><label for="title">Job title</label><input id="title"></div>
+      <div><label for="email">Email</label><input id="email" type="email"></div>
+      <div><label for="phone">Phone</label><input id="phone"></div>
+      <div><label for="whatsapp">WhatsApp</label><input id="whatsapp"></div>
+      <div><label for="website">Website</label><input id="website"></div>
+      <div><label for="instagram">Instagram</label><input id="instagram"></div>
+      <div><label for="linkedin">LinkedIn</label><input id="linkedin"></div>
+      <div><label for="niche">Niche</label><input id="niche" list="niches"><datalist id="niches"></datalist></div>
+      <div><label for="country">Country</label><input id="country" list="countries"><datalist id="countries"></datalist></div>
+    </div>
+    <button type="button" id="getApollo" class="btn apollo">Get from Apollo</button>
+    <div id="apolloBox" hidden>
+      <p id="apolloMsg" class="muted small" role="status"></p>
+      <ul id="apolloPeople" class="people"></ul>
+    </div>
+    <label class="check"><input id="apollo" type="checkbox"> Alt+Shift+S: also ask Apollo when there's no email</label>
+    <p class="muted small">Their website is always checked for a missing email first, for free.</p>
+    <button id="save" class="btn primary">Save to sheet</button>
+  </form>
+
+  <section id="result" hidden><div id="resultMsg" class="note" role="status"></div><button id="again" class="btn">Capture another page</button></section>
+  <p id="error" class="note err" role="alert" hidden></p>
+  <script src="extract.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

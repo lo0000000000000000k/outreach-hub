@@ -1,0 +1,27 @@
+body { margin: 0; width: 380px; font: 13px/1.4 Inter, system-ui, "Segoe UI", sans-serif; color: #18212f; background: #fff; }
+header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #e1e5ec; }
+header .link { margin-left: auto; }
+section, form, #error { padding: 10px 14px; }
+label { display: block; font-size: 11.5px; font-weight: 600; color: #344054; margin: 6px 0 3px; }
+input { width: 100%; box-sizing: border-box; border: 1px solid #d5dbe4; border-radius: 7px; padding: 6px 8px; font: inherit; }
+input:focus-visible, button:focus-visible { outline: 2px solid #2b5a8c; outline-offset: 1px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; }
+.full { grid-column: 1 / -1; }
+.btn { border: 1px solid #d5dbe4; background: #fff; border-radius: 8px; padding: 8px 12px; font: inherit; cursor: pointer; margin-top: 10px; }
+.btn.primary { background: #1e3a5f; border-color: #1e3a5f; color: #fff; width: 100%; font-weight: 600; }
+.btn:disabled { opacity: .6; }
+.link { background: none; border: 0; color: #2b5a8c; cursor: pointer; font: inherit; }
+.check { display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 12.5px; margin-top: 10px; }
+.check input { width: auto; }
+.muted { color: #5b6577; } .small { font-size: 11.5px; margin: 4px 0 0; }
+.note { padding: 8px 10px; border-radius: 8px; background: #e7f4ee; color: #0f5e4c; margin: 0 0 6px; }
+.note.warn { background: #fff4dd; color: #7a4b00; } .note.err { background: #fde8e8; color: #9b1c1c; margin: 10px 14px; }
+
+.btn.apollo { width: 100%; background: #f1ebfa; border-color: #c9b5ec; color: #4b2a85; font-weight: 600; }
+.from { display: block; font-size: 10.5px; color: #4b2a85; font-weight: 600; margin-top: 2px; }
+input.filled { border-color: #8a63d2; background: #faf7ff; }
+ul.people { list-style: none; margin: 6px 0 0; padding: 0; max-height: 180px; overflow: auto; border: 1px solid #e1e5ec; border-radius: 8px; }
+ul.people li button { width: 100%; text-align: left; background: #fff; border: 0; border-bottom: 1px solid #eef0f4; padding: 7px 10px; font: inherit; cursor: pointer; }
+ul.people li button:hover, ul.people li button:focus-visible { background: #f6f2ff; }
+ul.people .t { color: #5b6577; font-size: 11.5px; }
+ul.people:empty { display: none; }
