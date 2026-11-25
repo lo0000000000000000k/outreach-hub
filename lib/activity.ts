@@ -7,7 +7,9 @@ export type Activity = { at: string; action: string; lead: string; detail: strin
 const memory: Activity[] = [];
 
 async function ensureLogTab() {
-  await sheetRaw.sheets(`:batchUpdate`, { method: "POST", body: JSON.stringify({ requests: [{ addSheet: { properties: { title: env.logTab() } } }] }) }).catch(() => null);
+  // Fails if the tab is already there — then leave it alone (writing the header could overwrite its first row).
+  const made = await sheetRaw.sheets(`:batchUpdate`, { method: "POST", body: JSON.stringify({ requests: [{ addSheet: { properties: { title: env.logTab() } } }] }) }).catch(() => null);
+  if (!made) return;
   const tab = encodeURIComponent(env.logTab());
   await sheetRaw.sheets(`values/${tab}!A1?valueInputOption=RAW`, { method: "PUT", body: JSON.stringify({ values: [["Time", "Action", "Lead", "Detail"]] }) });
 }

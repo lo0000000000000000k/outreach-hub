@@ -2,7 +2,7 @@
 // demo leads when the sheet isn't connected yet.
 import { importPKCS8, SignJWT } from "jose";
 import { env, NotConfigured, sheetConfigured } from "./env";
-import { domainOf, igHandle, liKey } from "./extract";
+import { domainOf, igHandle, isGenericEmail, liKey } from "./extract";
 
 export const STATUSES = ["New", "Contacted", "Replied", "Meeting", "Closed"] as const;
 export type Status = (typeof STATUSES)[number];
@@ -42,10 +42,45 @@ export function dedupeKeys(l: Partial<Lead>): string[] {
   }
   return keys;
 }
+// Details that belong to one person. A website, phone, Instagram, info@ inbox or company LinkedIn page can be shared.
+const personEmail = (l: Partial<Lead>) => { const e = (l.email || "").trim().toLowerCase(); return e && !isGenericEmail(e) ? e : ""; };
+const personLi = (l: Partial<Lead>) => { const k = liKey(l.linkedin || ""); return k.startsWith("in/") ? k : ""; };
+export function personKeys(l: Partial<Lead>): string[] {
+  return [personEmail(l) && `e:${personEmail(l)}`, personLi(l) && `l:${personLi(l)}`].filter(Boolean);
+}
+
+const nameParts = (n = "") => n.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().split(/[^\p{L}\p{N}]+/u)
+  .filter((w) => w && !/^(dr|mr|mrs|ms|miss|prof|sir)$/.test(w));
+/** "Dr. Omar Haddad" = "Omar Haddad" = "Omar H." = "Omar". */
+function sameName(a: string, b: string): boolean {
+  const x = nameParts(a), y = nameParts(b);
+  if (x[0] !== y[0]) return false;
+  if (x.length < 2 || y.length < 2) return true;
+  const p = x[x.length - 1], q = y[y.length - 1];
+  return p === q || (p.length === 1 && q.startsWith(p)) || (q.length === 1 && p.startsWith(q));
+}
+
+/** The row this lead already has. One row per person: two different named people at one company are not duplicates. */
 export function findDuplicate(existing: Lead[], incoming: Partial<Lead>): Lead | undefined {
+  const named = nameParts(incoming.founder).length > 0;
+  const isNamed = (l: Lead) => nameParts(l.founder).length > 0;
   const keys = new Set(dedupeKeys(incoming));
-  if (!keys.size) return existing.find((l) => l.business.trim().toLowerCase() === (incoming.business || "").trim().toLowerCase());
-  return existing.find((l) => dedupeKeys(l).some((k) => keys.has(k)));
+  const business = (incoming.business || "").trim().toLowerCase();
+  const related = existing.filter((l) => (keys.size ? dedupeKeys(l).some((k) => keys.has(k)) : l.business.trim().toLowerCase() === business));
+
+  // 1. Their own email or LinkedIn profile.
+  const li = personLi(incoming), email = personEmail(incoming);
+  const own = (li && related.find((l) => personLi(l) === li))
+    || (email && related.find((l) => personEmail(l) === email
+      // Same email, but clearly someone else (different name and different profile): the email was filled in wrongly.
+      && !(named && isNamed(l) && !sameName(l.founder, incoming.founder!) && li && personLi(l) && personLi(l) !== li)));
+  if (own) return own;
+
+  // 2. Same company. No name on the page: the company's own row if there is one, else whoever we have there.
+  if (!named) return related.find((l) => !isNamed(l)) || related[0];
+  // With a name: that person's row, or a company row with no name that doesn't hold someone else's details.
+  return related.find((l) => isNamed(l) && sameName(l.founder, incoming.founder!))
+    || related.find((l) => !isNamed(l) && !personKeys(l).length);
 }
 
 /** Pure: old header → new header (renames, then missing columns added at the end). */
@@ -77,7 +112,7 @@ async function googleToken(): Promise<string> {
   return j.access_token;
 }
 async function sheets(pathAndQuery: string, init: RequestInit = {}) {
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.sheetId()}/${pathAndQuery}`, {
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.sheetId()}${pathAndQuery.startsWith(":") ? "" : "/"}${pathAndQuery}`, {
     ...init,
     headers: { Authorization: `Bearer ${await googleToken()}`, "Content-Type": "application/json" },
     cache: "no-store",

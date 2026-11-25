@@ -30,14 +30,15 @@ export const liUrl = (u: string) => { const k = liKey(u); return k ? `https://ww
 
 const FREEMAIL = /^(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|icloud|me|aol|proton|protonmail|zoho|gmx|mail|yandex|rediffmail)\./i;
 const JUNK_EMAIL = /(example\.|sentry|wixpress|godaddy|domain\.com|email\.com|yourdomain|@2x|\.(png|jpe?g|gif|webp|svg)$|noreply|no-reply|donotreply)/i;
+/** A shared inbox (info@, sales@…), not one person's address. */
+export const isGenericEmail = (e: string) => /^(info|hello|contact|support|admin|office|team|sales|enquiries|enquiry|help|mail)@/i.test(e.trim());
 export function pickEmail(cands: string[], domain = ""): string {
   const list = [...new Set(cands.map((c) => c.trim().toLowerCase().replace(/^mailto:/, "").split("?")[0]))]
     .filter((c) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(c) && !JUNK_EMAIL.test(c));
   const own = list.filter((c) => domain && c.endsWith("@" + domain));
   const pool = own.length ? own : list;
   // A person beats a generic inbox.
-  const generic = /^(info|hello|contact|support|admin|office|team|sales|enquiries|enquiry|help|mail)@/;
-  return pool.find((c) => !generic.test(c)) || pool[0] || "";
+  return pool.find((c) => !isGenericEmail(c)) || pool[0] || "";
 }
 
 export function pickPhone(cands: string[]): string {

@@ -149,6 +149,92 @@ async function main() {
     ok("nothing saved by lookup", !(await leads.all()).some((l) => l.website === "claude.ai"));
   }
 
+  console.log("\nOne row per person");
+  {
+    resetDemo();
+    const { captureApollo } = await import("../lib/capture");
+    // Pretend Apollo: four people, all at peakrealty.ae (Omar Haddad is already in the sheet with omar@).
+    const PEOPLE: Record<string, any> = {
+      "64f1a2b3c4d5e6f7a8b9c001": { name: "Ali Khan", email: "ali@peakrealty.ae", linkedin_url: "http://www.linkedin.com/in/alikhan" },
+      "64f1a2b3c4d5e6f7a8b9c002": { name: "Sara Lee", email: "sara@peakrealty.ae", linkedin_url: "http://www.linkedin.com/in/saralee" },
+      "64f1a2b3c4d5e6f7a8b9c003": { name: "John Park", email: "", linkedin_url: "http://www.linkedin.com/in/johnpark" },
+      "64f1a2b3c4d5e6f7a8b9c004": { name: "Omar Haddad", email: "omar@peakrealty.ae", linkedin_url: "http://www.linkedin.com/in/omarhaddad" },
+    };
+    const mocked = globalThis.fetch;
+    globalThis.fetch = (async (input: any, init?: any) => {
+      if (String(input) === "https://api.apollo.io/api/v1/people/match") {
+        const p = PEOPLE[JSON.parse(init.body).id];
+        return Response.json({ person: p && { ...p, organization: { name: "Peak Realty Dubai", primary_domain: "peakrealty.ae" } } });
+      }
+      return mocked(input, init);
+    }) as typeof fetch;
+    process.env.APOLLO_API_KEY = "fake";
+    const add = (ids: string[]) => captureApollo(ids.map((id) => ({ id, kind: "person" as const })), "apollo: peakrealty.ae", "");
+    const before = (await leads.all()).length;
+    const r = await add(Object.keys(PEOPLE));
+    const rows = (await leads.all()).filter((l) => l.website === "peakrealty.ae");
+    const who = (n: string) => rows.filter((l) => l.founder === n);
+    ok("3 new people at one company → 3 new rows", r.added === 3 && (await leads.all()).length === before + 3, r);
+    ok("person already in the sheet → no second row", r.updated + r.duplicate === 1 && who("Omar Haddad").length === 1, r);
+    ok("each person keeps their own email", who("Ali Khan")[0]?.email === "ali@peakrealty.ae" && who("Sara Lee")[0]?.email === "sara@peakrealty.ae", rows);
+    ok("website scan doesn't give John Omar's email", who("John Park")[0]?.email === "", who("John Park"));
+    const r2 = await add(Object.keys(PEOPLE));
+    ok("adding them all again → nothing new", r2.added === 0 && (await leads.all()).length === before + 3, r2);
+    delete process.env.APOLLO_API_KEY; globalThis.fetch = mocked;
+    const john = who("John Park")[0];
+    const jr = john ? await enrichRow(john.row, { apollo: false, via: "test" }) : null;
+    ok("Find email (website) doesn't give John Omar's email either", jr?.lead.email === "", jr);
+
+    const all = await leads.all();
+    const dup = (x: object) => findDuplicate(all, x)?.founder;
+    ok("different person, same company phone → not a duplicate", dup({ founder: "Zed Q", phone: "+971500000001" }) === undefined);
+    ok("same person: Mr. and a shortened surname don't matter", dup({ founder: "Mr. Omar H.", website: "peakrealty.ae" }) === "Omar Haddad");
+    ok("same email beats a nickname", dup({ founder: "Johnny Doe", email: "ALI@peakrealty.ae" }) === "Ali Khan");
+    ok("no name → company match still found", dup({ website: "peakrealty.ae" }) === "Omar Haddad");
+    const mk = (x: object) => ({ row: 2, business: "Co", founder: "", title: "", website: "co.io", email: "", phone: "", whatsapp: "", instagram: "", linkedin: "", niche: "", country: "", sourceUrl: "", dateAdded: "", status: "New", ...x });
+    ok("company-only row can take a person", !!findDuplicate([mk({ email: "info@co.io" })], { founder: "Ali Khan", website: "co.io", email: "ali@co.io" }));
+    ok("…but not when it holds someone else's email", !findDuplicate([mk({ email: "jane@co.io" })], { founder: "Ali Khan", website: "co.io", email: "ali@co.io" }));
+    ok("shared info@ inbox doesn't merge two people", !findDuplicate([mk({ founder: "Jane Roe", email: "info@co.io" })], { founder: "Ali Khan", email: "info@co.io" }));
+    ok("different LinkedIn people never merge on a wrong email", !findDuplicate([mk({ founder: "Ali Khan", email: "emma@co.io", linkedin: "linkedin.com/in/ali" })], { founder: "Emma Ross", email: "emma@co.io", linkedin: "linkedin.com/in/emma" }));
+    ok("company LinkedIn page doesn't merge two people", !findDuplicate([mk({ founder: "Jane Roe", linkedin: "linkedin.com/company/co" })], { founder: "Ali Khan", linkedin: "linkedin.com/company/co" }));
+    ok("no keys: same business, different person → not a duplicate", !findDuplicate([mk({ founder: "Jane Roe" })], { founder: "Ali Khan", business: "Co" }));
+  }
+
+  console.log("\nLog tab");
+  {
+    const { generateKeyPairSync } = await import("node:crypto");
+    const { logActivity, recentActivity } = await import("../lib/activity");
+    const mocked = globalThis.fetch;
+    const saved = { ...process.env };
+    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL = "bot@test.iam.gserviceaccount.com";
+    process.env.GOOGLE_PRIVATE_KEY = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    process.env.LEADS_SHEET_ID = "SHEET";
+    // Pretend Google Sheets: exact URLs only, and no Log tab at first.
+    let tab: string[][] | null = null, headerWrites = 0, failAppends = 0;
+    const rowsNow = () => (tab || []) as string[][];
+    const base = "https://sheets.googleapis.com/v4/spreadsheets/SHEET";
+    globalThis.fetch = (async (input: any, init?: any) => {
+      const u = String(input), b = init?.body && u.startsWith(base) ? JSON.parse(init.body) : null;
+      if (u === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "t", expires_in: 3600 });
+      if (u === `${base}:batchUpdate`) { if (tab) return new Response("already exists", { status: 400 }); tab = []; return Response.json({}); }
+      if (tab && u.startsWith(`${base}/values/Log!A1:append`)) { if (failAppends-- > 0) return new Response("busy", { status: 503 }); tab.push(...b.values); return Response.json({}); }
+      if (tab && u.startsWith(`${base}/values/Log!A1?`)) { headerWrites++; tab[0] = b.values[0]; return Response.json({}); }
+      if (tab && u === `${base}/values/Log!A2:D5000`) return Response.json({ values: tab.slice(1) });
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    await logActivity("Added", "First Co", "one");
+    ok("missing Log tab is created with its header", rowsNow()[0]?.join() === "Time,Action,Lead,Detail", tab);
+    ok("the first entry is kept", rowsNow()[1]?.[2] === "First Co", tab);
+    await logActivity("Added", "Second Co", "two");
+    ok("next entry appended, header written once", rowsNow().length === 3 && headerWrites === 1, tab);
+    ok("dashboard reads them back, newest first", (await recentActivity(5)).map((a) => a.lead).join() === "Second Co,First Co");
+    tab = [["2026-01-01", "Added", "Old Co", "no header row"]]; failAppends = 1;
+    await logActivity("Added", "Third Co", "three");
+    ok("a hiccup never overwrites an existing Log tab", rowsNow()[0][2] === "Old Co" && rowsNow()[1]?.[2] === "Third Co", tab);
+    globalThis.fetch = mocked;
+    for (const k of ["GOOGLE_SERVICE_ACCOUNT_EMAIL", "GOOGLE_PRIVATE_KEY", "LEADS_SHEET_ID"]) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+  }
+
   console.log("\nStatus");
   {
     resetDemo();
